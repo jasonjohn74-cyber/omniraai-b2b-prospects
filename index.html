@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Titan B2B Prospect — Court Partner Pipeline</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#05080f;color:#cfe0f5;}
+input,select,textarea,button{font-family:inherit;}
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#1a3055;border-radius:3px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+a{color:#4a86f5;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/htm@3/dist/htm.js"></script>
+<script>
+const{useState,useEffect}=React;
+const html=htm.bind(React.createElement);
+
+const SB_URL='https://vchtdsfrryxnvceierkn.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjaHRkc2Zycnl4bnZjZWllcmtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODcyMTYsImV4cCI6MjA5NDA2MzIxNn0.VuPuPqCbVYlxNpeTulkKK-IMezzxg3C05c4kWn3evqo';
+const SBH={'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Content-Type':'application/json'};
+const N8N_SCOUT='https://n8n-y8wq-production.up.railway.app/webhook/b2b-scout-run';
+const B2B_WA='60173210319';
+const DECK_URL='https://drive.google.com/file/d/1nON72_57Tq5QYuBTVlj1sXv9Nltfgmod/view';
+const EXISTING_PARTNERS=10, TARGET=50;
+
+const C={bg:'#05080f',s1:'#0a1020',s2:'#0e1830',s3:'#13213e',bd:'#17304e',bdB:'#1d4070',ac:'#4a86f5',tx:'#cfe0f5',dm:'#5a8ab0',ok:'#34d399',wn:'#fbbf24',er:'#f87171',pu:'#a78bfa',tl:'#2dd4bf',or:'#fb923c'};
+const inp=(ex={})=>({background:C.s2,border:`0.5px solid ${C.bd}`,borderRadius:6,color:C.tx,padding:'8px 11px',fontSize:13,width:'100%',outline:'none',...ex});
+const pbtn=(on,ex={})=>({background:on?C.ac:'transparent',color:on?'#fff':C.tx,border:on?'none':`0.5px solid ${C.bd}`,borderRadius:6,padding:'7px 14px',fontSize:13,cursor:'pointer',...ex});
+const uid=()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-4);
+const now=()=>new Date().toISOString();
+const fmtd=d=>d?new Date(d).toLocaleDateString('en-MY',{day:'numeric',month:'short'}):'—';
+const fmtrel=d=>{if(!d)return'—';const s=Math.floor((Date.now()-new Date(d))/1000);if(s<3600)return`${Math.max(1,Math.floor(s/60))}m ago`;if(s<86400)return`${Math.floor(s/3600)}h ago`;return`${Math.floor(s/86400)}d ago`;};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x.toISOString();};
+const digits=p=>(p||'').replace(/[^0-9]/g,'').replace(/^0/,'60');
+
+const STAGES=['new','contacted','engaged','meeting','proposal','signed','lost'];
+const SM={
+ new:{l:'🆕 New',c:C.dm},contacted:{l:'📨 Contacted',c:C.ac},engaged:{l:'💬 Engaged',c:C.tl},
+ meeting:{l:'🤝 Meeting',c:C.pu},proposal:{l:'📄 Proposal',c:C.or},signed:{l:'✅ Signed',c:C.ok},lost:{l:'❌ Lost',c:C.er}};
+const REGIONS=['Klang Valley','Penang','Johor'];
+
+// gap (days) AFTER sending touch N → next touch due. Day plan: 0,3,7,12,16,21
+const GAPS=[3,4,5,4,5,null];
+const DRIPS=[
+ {n:1,label:'Door Opener',msg:(p,v)=>`Hi ${p}! Congrats on ${v} — the courts look fantastic 🏓\n\nI'm Jason from Titan Ball Machines Malaysia (official distributor of the #1 pickleball drilling machine in the world, from the USA).\n\nQuick thought: most new venues we work with have the same gap — courts sit empty on weekday off-peak hours. Our partner courts fill those hours by renting a Titan machine to players who want to drill solo. One machine can generate up to RM18,800/month in rental income for the venue.\n\nWe already work with 10 partner courts across Malaysia. Worth a quick chat? Drop us a message: wa.me/${B2B_WA}`},
+ {n:2,label:'The Math',msg:(p,v)=>`Hi ${p}, Jason from Titan again 👋\n\nThe math our partner courts run on:\n\n🏓 Players rent the Titan machine at RM40-60/hr to drill (no partner needed)\n📅 Off-peak hours that earned RM0 now earn machine rental + court booking\n💰 Just 10 hours/week of machine rental ≈ RM1,800-2,400/month — and busy partner courts do far more\n\nThe machine turns your quietest hours into your most profitable ones, because a solo player drilling = a court booked that would've been empty.\n\nHappy to share real numbers from our 10 partner courts: wa.me/${B2B_WA}`},
+ {n:3,label:'Social Proof',msg:(p,v)=>`Hi ${p}! Quick share — one of our partner courts told us the Titan machine became their #1 weekday daytime booking driver. Players book a court *specifically* to drill with the machine, then stay on for games.\n\nWhat partners get:\n✅ Titan machine (the same one used by top US training academies)\n✅ Full setup + training for your staff\n✅ Marketing materials to promote machine sessions to your members\n✅ We handle maintenance\n\n10 courts across Malaysia are already earning with this. See it in action: wa.me/${B2B_WA}`},
+ {n:4,label:'Objection Killer',msg:(p,v)=>`Hi ${p}, the two questions every court owner asks us:\n\n1️⃣ "What if the machine doesn't get rented?" — At RM1,800/month, the machine pays for itself with just ~10 rental hours a week. Our partner courts typically cross breakeven in week 2 of each month. Everything after that is profit on hours your courts weren't earning anyway.\n\n2️⃣ "Why a deposit?" — It simply protects the machine (worth RM20k+). It's fully refundable, and you earn from day 1.\n\nOne year, one machine, your off-peak problem solved. Want the full numbers? wa.me/${B2B_WA}`},
+ {n:5,label:'Deck + Demo Ask',msg:(p,v)=>`Hi ${p}, sending over our partner deck so you can see exactly how it works — the model, the numbers, and what our 10 partner courts are doing with it: ${DECK_URL}\n\nI'd love to bring a Titan machine to ${v} for a free live demo — your players try it, you see the booking effect same day. Zero obligation.\n\nWhich works better for you, a weekday morning or afternoon? Or just WhatsApp us: wa.me/${B2B_WA}`},
+ {n:6,label:'Last Call',msg:(p,v)=>`Hi ${p}, last note from me — I don't want to clutter your inbox 🙂\n\nWe're allocating our next batch of Titan machines to partner courts this month, and we keep the network limited per area so each partner court stays the go-to drilling venue in its neighbourhood.\n\nIf filling off-peak hours is on your radar this quarter, grab a slot before your area is taken: wa.me/${B2B_WA}\n\nEither way — wishing ${v} a great opening run! 🏓`},
+];
+
+const db={
+ async list(){const r=await fetch(`${SB_URL}/rest/v1/b2b_prospects?select=*&order=updated_at.desc`,{headers:SBH});const d=await r.json();return Array.isArray(d)?d:[];},
+ async save(p){p.updated_at=now();await fetch(`${SB_URL}/rest/v1/b2b_prospects?on_conflict=id`,{method:'POST',headers:{...SBH,'Prefer':'resolution=merge-duplicates'},body:JSON.stringify(p)});},
+ async del(id){await fetch(`${SB_URL}/rest/v1/b2b_prospects?id=eq.${id}`,{method:'DELETE',headers:SBH});},
+ async getPin(){try{const r=await fetch(`${SB_URL}/rest/v1/settings?key=eq.pin&select=value`,{headers:SBH});const d=await r.json();return d[0]?.value||null;}catch{return null;}},
+};
+
+function Badge({stage}){const m=SM[stage]||SM.new;return html`<span style=${{background:`${m.c}18`,color:m.c,border:`0.5px solid ${m.c}50`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:500,whiteSpace:'nowrap'}}>${m.l}</span>`;}
+function Lb({children}){return html`<div style=${{fontSize:11,color:C.dm,textTransform:'uppercase',letterSpacing:'0.8px',marginBottom:5}}>${children}</div>`;}
+function Spinner(){return html`<div style=${{display:'flex',alignItems:'center',justifyContent:'center',gap:10,padding:40,color:C.dm,fontSize:13}}><div style=${{width:18,height:18,border:`2px solid ${C.bd}`,borderTop:`2px solid ${C.ac}`,borderRadius:'50%',animation:'spin .8s linear infinite'}}></div>Loading…</div>`;}
+
+function firstName(p){const cp=p.data?.contact_person||'';return cp?cp.split(' ')[0]:'there';}
+function dueState(p){
+ if(['signed','lost'].includes(p.stage)||!p.next_touch_at)return null;
+ const d=new Date(p.next_touch_at),today=new Date();today.setHours(23,59,59,999);
+ if(d<=today)return new Date(p.next_touch_at)<new Date(new Date().toDateString())?'overdue':'due';
+ return null;
+}
+function nextDrip(p){return p.drip_step<6?DRIPS[p.drip_step]:null;}
+function waLink(p,text){const n=digits(p.data?.whatsapp||p.data?.phone);return n?`https://wa.me/${n}${text?`?text=${encodeURIComponent(text)}`:''}`:null;}
+
+function blank(){return{id:uid(),venue_name:'',region:'Klang Valley',stage:'new',drip_step:0,next_touch_at:now(),source:'manual',updated_at:now(),data:{city:'',sport:'pickleball',status:'open',courts:'',address:'',phone:'',whatsapp:'',email:'',instagram:'',facebook:'',website:'',booking_link:'',contact_person:'',evidence_url:'',notes:'',touches:[],detected_at:now()}};}
+
+function Drawer({p,onClose,onSaved,onDeleted}){
+ const[e,setE]=useState(JSON.parse(JSON.stringify(p)));
+ const[busy,setBusy]=useState(false);const[copied,setCopied]=useState(false);const[note,setNote]=useState('');
+ const d=e.data||{};const drip=nextDrip(e);const msg=drip?drip.msg(firstName(e),e.venue_name):null;
+ const setD=(k,v)=>setE({...e,data:{...e.data,[k]:v}});
+ const save=async(x)=>{setBusy(true);await db.save(x||e);setBusy(false);onSaved();};
+ const markSent=async(channel)=>{
+  const step=e.drip_step+1;const gap=GAPS[step-1];
+  const ne={...e,drip_step:step,stage:e.stage==='new'?'contacted':e.stage,
+   next_touch_at:gap?addDays(now(),gap):null,
+   data:{...e.data,touches:[...(e.data.touches||[]),{step,label:DRIPS[step-1].label,channel,at:now()}]}};
+  setE(ne);await save(ne);
+ };
+ const setStage=async(s)=>{const ne={...e,stage:s,next_touch_at:['signed','lost'].includes(s)?null:e.next_touch_at};setE(ne);await save(ne);};
+ const addNote=async()=>{if(!note.trim())return;const ne={...e,data:{...e.data,touches:[...(e.data.touches||[]),{step:0,label:'Note',channel:'note',text:note.trim(),at:now()}]}};setE(ne);setNote('');await save(ne);};
+ const copy=async()=>{await navigator.clipboard.writeText(msg);setCopied(true);setTimeout(()=>setCopied(false),1500);};
+ const fld=(label,key,ph='')=>html`<div><${Lb}>${label}<//><input style=${inp()} value=${d[key]||''} placeholder=${ph} onInput=${ev=>setD(key,ev.target.value)} onBlur=${()=>save()}/></div>`;
+ return html`
+ <div style=${{position:'fixed',inset:0,background:'#000a',zIndex:50,display:'flex',justifyContent:'flex-end'}} onClick=${onClose}>
+  <div style=${{width:'min(560px,100%)',height:'100%',background:C.s1,borderLeft:`0.5px solid ${C.bdB}`,overflowY:'auto',padding:20,animation:'fadeIn .15s'}} onClick=${ev=>ev.stopPropagation()}>
+   <div style=${{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:14}}>
+    <div>
+     <input style=${inp({fontSize:17,fontWeight:600,background:'transparent',border:'none',padding:0,width:380})} value=${e.venue_name} onInput=${ev=>setE({...e,venue_name:ev.target.value})} onBlur=${()=>save()}/>
+     <div style=${{display:'flex',gap:8,marginTop:7,alignItems:'center'}}>
+      <${Badge} stage=${e.stage}/>
+      <span style=${{fontSize:12,color:C.dm}}>${d.city||e.region} · ${d.sport||''} ${d.courts?`· ${d.courts} courts`:''} · ${e.source==='ai_scout'?'🤖 AI Scout':'✍️ Manual'}</span>
+     </div>
+    </div>
+    <button style=${pbtn(false,{padding:'4px 10px'})} onClick=${onClose}>✕</button>
+   </div>
+
+   <div style=${{display:'flex',gap:6,flexWrap:'wrap',marginBottom:16}}>
+    ${STAGES.map(s=>html`<button key=${s} style=${pbtn(e.stage===s,{padding:'5px 10px',fontSize:12,...(e.stage===s?{background:SM[s].c,color:'#04101e'}:{})})} onClick=${()=>setStage(s)}>${SM[s].l}</button>`)}
+   </div>
+
+   ${drip&&!['signed','lost'].includes(e.stage)&&html`
+   <div style=${{background:C.s2,border:`0.5px solid ${C.bdB}`,borderRadius:10,padding:14,marginBottom:16}}>
+    <div style=${{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+     <div style=${{fontSize:12,color:C.ac,fontWeight:600}}>NEXT: Touch ${drip.n}/6 — ${drip.label}</div>
+     <div style=${{fontSize:12,color:dueState(e)?C.wn:C.dm}}>${e.next_touch_at?`due ${fmtd(e.next_touch_at)}`:''}</div>
+    </div>
+    <div style=${{fontSize:12.5,whiteSpace:'pre-wrap',color:C.tx,background:C.bg,border:`0.5px solid ${C.bd}`,borderRadius:8,padding:11,maxHeight:200,overflowY:'auto',marginBottom:10}}>${msg}</div>
+    <div style=${{display:'flex',gap:8,flexWrap:'wrap'}}>
+     <button style=${pbtn(true)} onClick=${copy}>${copied?'✓ Copied':'📋 Copy Message'}</button>
+     ${waLink(e,msg)&&html`<a href=${waLink(e,msg)} target="_blank" style=${{...pbtn(false,{textDecoration:'none',background:'#25d36622',border:'0.5px solid #25d36655',color:'#25d366'})}}>💬 Open WhatsApp</a>`}
+     <button style=${pbtn(false,{borderColor:C.ok,color:C.ok})} onClick=${()=>markSent(d.whatsapp||d.phone?'whatsapp':'other')} disabled=${busy}>✓ Mark Sent</button>
+    </div>
+   </div>`}
+
+   <div style=${{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+    <div><${Lb}>Region<//><select style=${inp()} value=${e.region||''} onChange=${ev=>{const ne={...e,region:ev.target.value};setE(ne);save(ne);}}>${REGIONS.map(r=>html`<option key=${r} value=${r}>${r}</option>`)}</select></div>
+    ${fld('Contact Person','contact_person','Owner / PIC name')}
+    ${fld('Phone','phone','+60…')}
+    ${fld('WhatsApp','whatsapp','+60…')}
+    ${fld('Email','email')}
+    ${fld('Instagram','instagram','@handle')}
+    ${fld('Facebook','facebook')}
+    ${fld('Website','website')}
+    ${fld('Booking Link','booking_link')}
+    ${fld('City','city')}
+    <div style=${{gridColumn:'span 2'}}><${Lb}>Address<//><input style=${inp()} value=${d.address||''} onInput=${ev=>setD('address',ev.target.value)} onBlur=${()=>save()}/></div>
+    <div style=${{gridColumn:'span 2'}}><${Lb}>Notes<//><textarea style=${inp({minHeight:60,resize:'vertical'})} value=${d.notes||''} onInput=${ev=>setD('notes',ev.target.value)} onBlur=${()=>save()}/></div>
+    <div><${Lb}>Next touch date<//><input type="date" style=${inp()} value=${e.next_touch_at?e.next_touch_at.slice(0,10):''} onChange=${ev=>{const ne={...e,next_touch_at:ev.target.value?new Date(ev.target.value+'T09:00:00').toISOString():null};setE(ne);save(ne);}}/></div>
+    ${d.evidence_url&&html`<div><${Lb}>Source<//><a href=${d.evidence_url} target="_blank" style=${{fontSize:12}}>evidence link ↗</a></div>`}
+   </div>
+
+   <div style=${{marginBottom:16}}>
+    <${Lb}>Activity log<//>
+    <div style=${{display:'flex',gap:8,marginBottom:8}}>
+     <input style=${inp()} placeholder="Add note (call outcome, reply, etc.)" value=${note} onInput=${ev=>setNote(ev.target.value)} onKeyDown=${ev=>ev.key==='Enter'&&addNote()}/>
+     <button style=${pbtn(false)} onClick=${addNote}>Add</button>
+    </div>
+    ${[...(d.touches||[])].reverse().map((t,i)=>html`<div key=${i} style=${{fontSize:12,padding:'6px 0',borderBottom:`0.5px solid ${C.bd}`,display:'flex',gap:8}}>
+      <span style=${{color:C.dm,minWidth:70}}>${fmtd(t.at)}</span>
+      <span>${t.step?`📤 Touch ${t.step} — ${t.label} (${t.channel})`:`📝 ${t.text}`}</span></div>`)}
+    ${!(d.touches||[]).length&&html`<div style=${{fontSize:12,color:C.dm}}>No activity yet — Door Opener is due.</div>`}
+   </div>
+
+   <button style=${pbtn(false,{borderColor:C.er,color:C.er,fontSize:12})} onClick=${async()=>{if(confirm(`Delete ${e.venue_name}?`)){await db.del(e.id);onDeleted();}}}>🗑️ Delete prospect</button>
+  </div>
+ </div>`;
+}
+
+function AddModal({onClose,onAdded}){
+ const[e,setE]=useState(blank());
+ const setD=(k,v)=>setE({...e,data:{...e.data,[k]:v}});
+ return html`
+ <div style=${{position:'fixed',inset:0,background:'#000a',zIndex:50,display:'flex',alignItems:'center',justifyContent:'center'}} onClick=${onClose}>
+  <div style=${{width:'min(480px,94%)',background:C.s1,border:`0.5px solid ${C.bdB}`,borderRadius:12,padding:20}} onClick=${ev=>ev.stopPropagation()}>
+   <div style=${{fontSize:15,fontWeight:600,marginBottom:14}}>➕ Add Prospect</div>
+   <div style=${{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+    <div style=${{gridColumn:'span 2'}}><${Lb}>Venue name *<//><input style=${inp()} value=${e.venue_name} onInput=${ev=>setE({...e,venue_name:ev.target.value})}/></div>
+    <div><${Lb}>Region<//><select style=${inp()} value=${e.region} onChange=${ev=>setE({...e,region:ev.target.value})}>${REGIONS.map(r=>html`<option key=${r}>${r}</option>`)}</select></div>
+    <div><${Lb}>City<//><input style=${inp()} value=${e.data.city} onInput=${ev=>setD('city',ev.target.value)}/></div>
+    <div><${Lb}>Contact person<//><input style=${inp()} value=${e.data.contact_person} onInput=${ev=>setD('contact_person',ev.target.value)}/></div>
+    <div><${Lb}>WhatsApp<//><input style=${inp()} value=${e.data.whatsapp} placeholder="+60…" onInput=${ev=>setD('whatsapp',ev.target.value)}/></div>
+    <div><${Lb}>Instagram<//><input style=${inp()} value=${e.data.instagram} onInput=${ev=>setD('instagram',ev.target.value)}/></div>
+    <div><${Lb}>Email<//><input style=${inp()} value=${e.data.email} onInput=${ev=>setD('email',ev.target.value)}/></div>
+   </div>
+   <div style=${{display:'flex',gap:8,marginTop:16,justifyContent:'flex-end'}}>
+    <button style=${pbtn(false)} onClick=${onClose}>Cancel</button>
+    <button style=${pbtn(true)} disabled=${!e.venue_name.trim()} onClick=${async()=>{await db.save(e);onAdded();}}>Add — Door Opener due now</button>
+   </div>
+  </div>
+ </div>`;
+}
+
+function App(){
+ const[locked,setLocked]=useState(true);const[pin,setPin]=useState('');const[savedPin,setSavedPin]=useState(undefined);
+ const[rows,setRows]=useState(null);const[sel,setSel]=useState(null);const[adding,setAdding]=useState(false);
+ const[region,setRegion]=useState('All');const[stage,setStage]=useState('All');const[q,setQ]=useState('');
+ const[scan,setScan]=useState('');
+ const load=async()=>setRows(await db.list());
+ useEffect(()=>{db.getPin().then(p=>{setSavedPin(p);if(!p)setLocked(false);});load();},[]);
+ if(locked&&savedPin!==undefined)return html`
+  <div style=${{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center'}}>
+   <div style=${{background:C.s1,border:`0.5px solid ${C.bd}`,borderRadius:12,padding:28,width:300,textAlign:'center'}}>
+    <div style=${{fontSize:24,marginBottom:6}}>🏓</div>
+    <div style=${{fontWeight:600,marginBottom:14}}>Titan B2B Prospect</div>
+    <input type="password" style=${inp({textAlign:'center'})} placeholder="PIN" value=${pin} autoFocus
+     onInput=${e=>setPin(e.target.value)} onKeyDown=${e=>{if(e.key==='Enter'){if(pin===savedPin)setLocked(false);else setPin('');}}}/>
+   </div></div>`;
+ if(!rows)return html`<${Spinner}/>`;
+
+ const signed=rows.filter(r=>r.stage==='signed').length;
+ const due=rows.filter(r=>dueState(r));
+ const filtered=rows.filter(r=>(region==='All'||r.region===region)&&(stage==='All'||r.stage===stage)&&(!q||r.venue_name.toLowerCase().includes(q.toLowerCase())||(r.data?.city||'').toLowerCase().includes(q.toLowerCase())));
+ const counts=Object.fromEntries(STAGES.map(s=>[s,rows.filter(r=>r.stage===s).length]));
+ const partners=EXISTING_PARTNERS+signed;
+ const runScan=async()=>{setScan('…');try{await fetch(N8N_SCOUT,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});setScan('🔭 Scout triggered — new leads will appear here + Telegram alert');}catch{setScan('⚠️ Scout webhook not reachable — is the n8n workflow imported & active?');}setTimeout(()=>setScan(''),6000);};
+
+ return html`
+ <div style=${{maxWidth:1100,margin:'0 auto',padding:'18px 16px 60px'}}>
+  <div style=${{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:10,marginBottom:6}}>
+   <div>
+    <div style=${{fontSize:19,fontWeight:700}}>🏓 Titan B2B Prospect</div>
+    <div style=${{fontSize:12,color:C.dm}}>Court partner pipeline — Klang Valley · Penang · Johor</div>
+   </div>
+   <div style=${{display:'flex',gap:8}}>
+    <button style=${pbtn(false)} onClick=${runScan}>🔭 Scan Now</button>
+    <button style=${pbtn(false)} onClick=${load}>↻</button>
+    <button style=${pbtn(true)} onClick=${()=>setAdding(true)}>➕ Add Prospect</button>
+   </div>
+  </div>
+  ${scan&&html`<div style=${{fontSize:12,color:C.wn,marginBottom:8}}>${scan}</div>`}
+
+  <div style=${{background:C.s1,border:`0.5px solid ${C.bd}`,borderRadius:10,padding:'12px 16px',margin:'12px 0',display:'flex',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+   <div style=${{fontSize:13}}><b style=${{color:C.ok,fontSize:18}}>${partners}</b><span style=${{color:C.dm}}> / ${TARGET} partner courts</span></div>
+   <div style=${{flex:1,minWidth:160,height:8,background:C.s3,borderRadius:6,overflow:'hidden'}}><div style=${{width:`${Math.min(100,partners/TARGET*100)}%`,height:'100%',background:`linear-gradient(90deg,${C.ac},${C.ok})`}}></div></div>
+   <div style=${{fontSize:12,color:C.dm}}>${rows.length} in pipeline · ${counts.engaged+counts.meeting+counts.proposal} in play · ${TARGET-partners} to go</div>
+  </div>
+
+  ${due.length>0&&html`
+  <div style=${{background:'#fbbf2410',border:`0.5px solid ${C.wn}50`,borderRadius:10,padding:14,marginBottom:14}}>
+   <div style=${{fontSize:12,color:C.wn,fontWeight:700,letterSpacing:'0.5px',marginBottom:9}}>⏰ DUE TODAY — ${due.length} message${due.length>1?'s':''} to send</div>
+   ${due.map(p=>{const dr=nextDrip(p);return html`
+    <div key=${p.id} style=${{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderTop:`0.5px solid ${C.bd}`,gap:8,flexWrap:'wrap'}}>
+     <div style=${{fontSize:13}}><b>${p.venue_name}</b> <span style=${{color:C.dm,fontSize:12}}>· ${p.region} · ${dr?`Touch ${dr.n}: ${dr.label}`:'follow-up'} ${dueState(p)==='overdue'?html`<span style=${{color:C.er}}>· OVERDUE</span>`:''}</span></div>
+     <button style=${pbtn(true,{padding:'5px 12px',fontSize:12})} onClick=${()=>setSel(p)}>Open ➜</button>
+    </div>`;})}
+  </div>`}
+
+  <div style=${{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+   ${['All',...REGIONS].map(r=>html`<button key=${r} style=${pbtn(region===r,{padding:'5px 12px',fontSize:12})} onClick=${()=>setRegion(r)}>${r}</button>`)}
+   <div style=${{width:1,background:C.bd,margin:'0 4px'}}></div>
+   ${['All',...STAGES].map(s=>html`<button key=${s} style=${pbtn(stage===s,{padding:'5px 10px',fontSize:12})} onClick=${()=>setStage(s)}>${s==='All'?'All':SM[s].l}${s!=='All'&&counts[s]?` ${counts[s]}`:''}</button>`)}
+  </div>
+  <input style=${inp({marginBottom:12,maxWidth:320})} placeholder="🔍 Search venue / city…" value=${q} onInput=${e=>setQ(e.target.value)}/>
+
+  ${filtered.length===0?html`<div style=${{color:C.dm,fontSize:13,padding:30,textAlign:'center'}}>No prospects match. Hit 🔭 Scan Now or ➕ Add Prospect.</div>`:
+  filtered.map(p=>{const d=p.data||{};const dr=nextDrip(p);const ds=dueState(p);return html`
+   <div key=${p.id} onClick=${()=>setSel(p)} style=${{background:C.s1,border:`0.5px solid ${ds?C.wn+'70':C.bd}`,borderRadius:10,padding:'12px 16px',marginBottom:8,cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap',animation:'fadeIn .15s'}}>
+    <div style=${{minWidth:230,flex:2}}>
+     <div style=${{fontSize:14,fontWeight:600}}>${p.venue_name} ${p.source==='ai_scout'?html`<span title="found by AI Scout" style=${{fontSize:11}}>🤖</span>`:''}</div>
+     <div style=${{fontSize:12,color:C.dm,marginTop:2}}>${d.city||p.region} · ${d.sport||'—'}${d.courts?` · ${d.courts} courts`:''}</div>
+    </div>
+    <div style=${{display:'flex',gap:10,alignItems:'center',fontSize:13}}>
+     ${(d.whatsapp||d.phone)&&html`<a href=${waLink(p)} target="_blank" onClick=${e=>e.stopPropagation()} title=${d.whatsapp||d.phone}>💬</a>`}
+     ${d.instagram&&html`<a href=${`https://instagram.com/${(d.instagram||'').replace('@','')}`} target="_blank" onClick=${e=>e.stopPropagation()}>📸</a>`}
+     ${d.email&&html`<a href=${`mailto:${d.email}`} onClick=${e=>e.stopPropagation()}>📧</a>`}
+     ${d.website&&html`<a href=${(d.website.startsWith('http')?'':'https://')+d.website} target="_blank" onClick=${e=>e.stopPropagation()}>🌐</a>`}
+    </div>
+    <div style=${{flex:1,minWidth:150,fontSize:12,color:ds?C.wn:C.dm,textAlign:'right'}}>
+     ${['signed','lost'].includes(p.stage)?'':dr?`Touch ${dr.n}/6 ${p.next_touch_at?`· due ${fmtd(p.next_touch_at)}`:''}`:'sequence done'}
+     <div style=${{color:C.dm,fontSize:11}}>updated ${fmtrel(p.updated_at)}</div>
+    </div>
+    <${Badge} stage=${p.stage}/>
+   </div>`;})}
+
+  ${sel&&html`<${Drawer} p=${sel} onClose=${()=>{setSel(null);load();}} onSaved=${load} onDeleted=${()=>{setSel(null);load();}}/>`}
+  ${adding&&html`<${AddModal} onClose=${()=>setAdding(false)} onAdded=${()=>{setAdding(false);load();}}/>`}
+ </div>`;
+}
+ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
+</script>
+</body>
+</html>
