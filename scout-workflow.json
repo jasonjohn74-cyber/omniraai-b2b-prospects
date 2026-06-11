@@ -1,0 +1,44 @@
+{
+  "name": "OmniraAI - B2B Court Scout",
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "name": "Daily 9am MYT",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 1 * * *" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Manual Scan Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 200],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "b2b-scout-run",
+        "responseMode": "onReceived"
+      }
+    },
+    {
+      "name": "Scout & Insert Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [260, 100],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const SB = 'https://vchtdsfrryxnvceierkn.supabase.co';\nconst SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZjaHRkc2Zycnl4bnZjZWllcmtuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0ODcyMTYsImV4cCI6MjA5NDA2MzIxNn0.VuPuPqCbVYlxNpeTulkKK-IMezzxg3C05c4kWn3evqo';\nconst SBH = { apikey: SB_KEY, Authorization: `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' };\n\n// 1. Load settings\nconst settings = await this.helpers.httpRequest({ url: `${SB}/rest/v1/settings?select=key,value&key=in.(claude_api_key,telegram_bot_token,telegram_owner_id)`, headers: SBH, json: true });\nconst S = Object.fromEntries(settings.map(s => [s.key, s.value]));\n\n// 2. Existing prospects for dedupe\nconst existing = await this.helpers.httpRequest({ url: `${SB}/rest/v1/b2b_prospects?select=venue_name`, headers: SBH, json: true });\nconst norm = n => (n || '').toLowerCase().replace(/[^a-z0-9]/g, '');\nconst known = new Set(existing.map(e => norm(e.venue_name)));\n\n// 3. Claude with web search — find new venues\nconst prompt = `Search the web for NEWLY OPENED or SOON-TO-OPEN pickleball and padel court venues in Malaysia, specifically in: Klang Valley (KL/Selangor), Penang, and Johor (especially Johor Bahru). Focus on venues announced or opened in the last 6 months. Search Facebook, Instagram, news sites, Courtsite, AFA, Google Maps listings.\\n\\nFor each venue found, extract every contact detail you can find: phone/WhatsApp numbers, email, Instagram handle, Facebook page, website, booking platform link, address, owner or person-in-charge name.\\n\\nReturn ONLY a JSON array (no markdown, no commentary). Each element:\\n{\\\"venue_name\\\":\\\"\\\",\\\"region\\\":\\\"Klang Valley|Penang|Johor\\\",\\\"city\\\":\\\"\\\",\\\"sport\\\":\\\"pickleball|padel|both\\\",\\\"status\\\":\\\"open|opening_soon\\\",\\\"opened_est\\\":\\\"YYYY-MM\\\",\\\"courts\\\":0,\\\"address\\\":\\\"\\\",\\\"phone\\\":\\\"\\\",\\\"whatsapp\\\":\\\"\\\",\\\"email\\\":\\\"\\\",\\\"instagram\\\":\\\"\\\",\\\"facebook\\\":\\\"\\\",\\\"website\\\":\\\"\\\",\\\"booking_link\\\":\\\"\\\",\\\"contact_person\\\":\\\"\\\",\\\"evidence_url\\\":\\\"\\\",\\\"notes\\\":\\\"\\\"}\\nUse \\\"\\\" for unknown fields. Only include real venues you found evidence for — never invent.`;\n\nconst resp = await this.helpers.httpRequest({\n  method: 'POST', url: 'https://api.anthropic.com/v1/messages',\n  headers: { 'x-api-key': S.claude_api_key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },\n  body: { model: 'claude-sonnet-4-6', max_tokens: 8000, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 10 }], messages: [{ role: 'user', content: prompt }] },\n  json: true, timeout: 280000\n});\n\nconst text = (resp.content || []).filter(b => b.type === 'text').map(b => b.text).join('\\n');\nconst m = text.match(/\\[[\\s\\S]*\\]/);\nlet venues = [];\ntry { venues = JSON.parse(m ? m[0] : '[]'); } catch (e) { venues = []; }\n\n// 4. Insert new ones\nconst uid = () => Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);\nconst fresh = [];\nfor (const v of venues) {\n  if (!v.venue_name || known.has(norm(v.venue_name))) continue;\n  known.add(norm(v.venue_name));\n  const row = {\n    id: uid(), venue_name: v.venue_name, region: v.region || 'Klang Valley',\n    stage: 'new', drip_step: 0, next_touch_at: new Date().toISOString(), source: 'ai_scout',\n    data: { ...v, touches: [], detected_at: new Date().toISOString() },\n    updated_at: new Date().toISOString()\n  };\n  try {\n    await this.helpers.httpRequest({ method: 'POST', url: `${SB}/rest/v1/b2b_prospects`, headers: SBH, body: row, json: true });\n    fresh.push(row);\n  } catch (e) { /* unique index race — skip */ }\n}\n\n// 5. Telegram alert\nif (S.telegram_bot_token && S.telegram_owner_id) {\n  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n  let msg;\n  if (fresh.length) {\n    msg = `\\uD83C\\uDFAF <b>B2B Scout: ${fresh.length} new court lead${fresh.length > 1 ? 's' : ''} found!</b>\\n\\n` + fresh.map(r => `\\uD83C\\uDFD3 <b>${esc(r.venue_name)}</b> — ${esc(r.region)}\\n${esc(r.data.city)} \\u00B7 ${esc(r.data.sport)} \\u00B7 ${esc(r.data.status)}${r.data.phone || r.data.whatsapp ? `\\n\\uD83D\\uDCF1 ${esc(r.data.whatsapp || r.data.phone)}` : ''}${r.data.instagram ? `\\n\\uD83D\\uDCF8 ${esc(r.data.instagram)}` : ''}`).join('\\n\\n') + `\\n\\n\\u27A1\\uFE0F Door Opener due now — open the B2B dashboard.`;\n  } else {\n    msg = `\\uD83D\\uDD0D B2B Scout ran — no new venues found today (${venues.length} checked, all already tracked).`;\n  }\n  await this.helpers.httpRequest({ method: 'POST', url: `https://api.telegram.org/bot${S.telegram_bot_token}/sendMessage`, body: { chat_id: S.telegram_owner_id, text: msg.slice(0, 4000), parse_mode: 'HTML' }, json: true }).catch(() => {});\n}\n\nreturn [{ json: { checked: venues.length, inserted: fresh.length, names: fresh.map(f => f.venue_name) } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Daily 9am MYT": { "main": [[{ "node": "Scout & Insert Leads", "type": "main", "index": 0 }]] },
+    "Manual Scan Webhook": { "main": [[{ "node": "Scout & Insert Leads", "type": "main", "index": 0 }]] }
+  }
+}
